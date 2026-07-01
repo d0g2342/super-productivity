@@ -1341,16 +1341,19 @@ describe('DialogViewTaskRemindersComponent reconciles vanished reminders (sync)'
     expect(clearedIds).toEqual([]);
   });
 
-  it('keeps a reminder that is rescheduled to the future (still a valid reminder, not gone)', () => {
-    const component = createComponent([buildReminder('task-1')], [buildTask('task-1')]);
+  it('drops a reminder rescheduled into the future (e.g. snoozed on another device)', () => {
+    createComponent([buildReminder('task-1')], [buildTask('task-1')]);
 
-    // Rescheduled (e.g. snoozed on another device): remindAt is still a number,
-    // just in the future. The reminder still exists, so it must NOT be dropped.
+    // Deliberate divergence from upstream: a reminder whose remindAt moves into
+    // the FUTURE (e.g. snoozed on another device and synced in) is no longer
+    // currently due, so it is dropped from this disableClose "due now" dialog
+    // instead of forcing a second manual dismissal here. The worker re-fires it
+    // at the new time.
     const ONE_HOUR_MS = 60 * 60 * 1000;
     storeTasks$.next([buildTask('task-1', { remindAt: Date.now() + ONE_HOUR_MS })]);
 
-    expect(matDialogRefSpy.close).not.toHaveBeenCalled();
-    expect(component.taskIds$.getValue()).toEqual(['task-1']);
+    // Only reminder in the dialog -> nothing left to show -> dialog closes.
+    expect(matDialogRefSpy.close).toHaveBeenCalledTimes(1);
   });
 
   it('closes once when ALL reminders vanish in a single store emission', () => {
