@@ -19,6 +19,12 @@ export class NotifyService {
   private _platformService = inject(CapacitorPlatformService);
   private _notificationService = inject(CapacitorNotificationService);
 
+  // Retained tagged desktop notifications so they can be closed programmatically
+  // once the underlying reminder is handled on another device (see
+  // closeNotificationByTag). Basic notifications are shown with
+  // requireInteraction and would otherwise linger indefinitely.
+  private _shownNotifications = new Map<string, Notification>();
+
   async notifyDesktop(options: NotifyModel): Promise<Notification | undefined> {
     if (!IS_MOBILE) {
       return this.notify(options);
@@ -98,14 +104,25 @@ export class NotifyService {
           ...options,
           body,
         });
+        if (options.tag) {
+          this._shownNotifications.set(options.tag, instance);
+        }
+        const cleanup = (): void => {
+          if (options.tag && this._shownNotifications.get(options.tag) === instance) {
+            this._shownNotifications.delete(options.tag);
+          }
+        };
+        instance.onclose = cleanup;
         instance.onclick = () => {
           instance.close();
+          cleanup();
           if (IS_ELECTRON) {
             this._uiHelperService.focusApp();
           }
         };
         setTimeout(() => {
           instance.close();
+          cleanup();
         }, options.duration || 10000);
         return instance;
       }
@@ -118,6 +135,34 @@ export class NotifyService {
       });
     }
     return undefined;
+  }
+
+  /**
+   * Close an already-shown desktop notification by its tag. Used when the
+   * underlying reminder is dismissed/rescheduled (locally or via sync from
+   * another device) so a lingering requireInteraction banner is retracted.
+   */
+  async closeNotificationByTag(tag: string): Promise<void> {
+    if (!tag) {
+      return;
+    }
+    const instance = this._shownNotifications.get(tag);
+    if (instance) {
+      instance.close();
+      this._shownNotifications.delete(tag);
+    }
+    // Service-worker path (PWA/browser) has no instance handle to retain.
+    if (this._isServiceWorkerAvailable()) {
+      try {
+        const reg = await navigator.serviceWorker.getRegistration('ngsw-worker.js');
+        if (reg?.getNotifications) {
+          const notifications = await reg.getNotifications({ tag });
+          notifications.forEach((n) => n.close());
+        }
+      } catch (error) {
+        Log.err('NotifyService: Failed to close notification by tag', error);
+      }
+    }
   }
 
   private _isBasicNotificationSupport(): boolean {

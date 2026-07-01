@@ -323,6 +323,38 @@ export class CapacitorNotificationService {
   }
 
   /**
+   * Remove an ALREADY-DELIVERED notification by ID from the notification
+   * center / lock screen. `cancel()` only affects still-pending (not yet fired)
+   * notifications, so a reminder that already fired on this device must be
+   * cleared here — e.g. when it was dismissed/rescheduled on another device and
+   * the change arrived via sync.
+   */
+  async removeDelivered(notificationId: number): Promise<boolean> {
+    if (!this.isAvailable) {
+      return false;
+    }
+
+    try {
+      const { notifications } = await LocalNotifications.getDeliveredNotifications();
+      const match = notifications.filter((n) => n.id === notificationId);
+      if (match.length === 0) {
+        return false;
+      }
+      await LocalNotifications.removeDeliveredNotifications({ notifications: match });
+      Log.log('CapacitorNotificationService: Delivered notification removed', {
+        id: notificationId,
+      });
+      return true;
+    } catch (error) {
+      Log.err(
+        'CapacitorNotificationService: Failed to remove delivered notification',
+        error,
+      );
+      return false;
+    }
+  }
+
+  /**
    * Register a listener for notification actions
    */
   async addActionListener(

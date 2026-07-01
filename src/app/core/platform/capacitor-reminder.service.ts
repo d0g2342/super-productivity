@@ -248,7 +248,13 @@ export class CapacitorReminderService {
 
     // On iOS (and Android as fallback), use Capacitor LocalNotifications
     if (this._platformService.isNative) {
-      return this._notificationService.cancel(notificationId);
+      const cancelled = await this._notificationService.cancel(notificationId);
+      // cancel() only removes still-pending notifications. If the reminder had
+      // already fired on this device (e.g. it was dismissed/rescheduled on
+      // another device and the change arrived via sync), the delivered banner
+      // would otherwise linger on the lock screen / notification center.
+      await this._notificationService.removeDelivered(notificationId);
+      return cancelled;
     }
 
     return false;

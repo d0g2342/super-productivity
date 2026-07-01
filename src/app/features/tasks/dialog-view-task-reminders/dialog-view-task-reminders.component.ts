@@ -41,6 +41,7 @@ import { getDbDateStr } from '../../../util/get-db-date-str';
 import { selectTodayTaskIds } from '../../work-context/store/work-context.selectors';
 import { DateService } from '../../../core/date/date.service';
 import { MatTooltip } from '@angular/material/tooltip';
+import { NotifyService } from '../../../core/notify/notify.service';
 
 const MINUTES_TO_MILLISECONDS = 1000 * 60;
 
@@ -94,6 +95,7 @@ export class DialogViewTaskRemindersComponent implements OnDestroy {
   private _reminderService = inject(ReminderService);
   private _dateService = inject(DateService);
   private _elementRef = inject(ElementRef);
+  private _notifyService = inject(NotifyService);
   data = inject<{
     reminders: TaskWithReminderData[];
   }>(MAT_DIALOG_DATA);
@@ -148,6 +150,12 @@ export class DialogViewTaskRemindersComponent implements OnDestroy {
   overdueThreshold = Date.now() - 30 * 60 * 1000; // 30 minutes
 
   private _subs: Subscription = new Subscription();
+  // Same aggregate tag reminder.module uses for the desktop notification, so the
+  // lingering requireInteraction banner can be retracted when this dialog closes.
+  private readonly _notificationTag = this.data.reminders.reduce(
+    (acc, reminder) => acc + '_' + reminder.id,
+    '',
+  );
   // Track dismissed reminder IDs to prevent stale data from worker re-triggering them
   private _dismissedReminderIds = new Set<string>();
   // Reminders we have observed as still-valid in the store at least once. We only
@@ -233,6 +241,10 @@ export class DialogViewTaskRemindersComponent implements OnDestroy {
         this._store.dispatch(TaskSharedActions.clearDeadlineReminder({ taskId }));
       }
     });
+    // Retract the desktop notification banner (shown with requireInteraction, so
+    // it never auto-dismisses) whenever the dialog goes away — including when it
+    // was closed because the reminder was handled on another device.
+    void this._notifyService.closeNotificationByTag(this._notificationTag);
     this._subs.unsubscribe();
   }
 
