@@ -516,14 +516,19 @@ export class DialogViewTaskRemindersComponent implements OnDestroy {
       if (!task || task.isDone) {
         return false;
       }
-      // A reminder is still "present" as long as its timestamp exists; clearing it
-      // (unschedule / dismiss / remove deadline) is what marks it as gone. We do not
-      // treat a future-rescheduled timestamp as gone — that reminder still exists and
-      // the worker will fire it again later.
       const remindAt = this._deadlineReminderTaskIds.has(id)
         ? task.deadlineRemindAt
         : task.remindAt;
-      return typeof remindAt === 'number';
+      if (typeof remindAt !== 'number') {
+        // Cleared entirely (unschedule / dismiss / remove deadline) -> gone.
+        return false;
+      }
+      // Divergence from upstream: a reminder rescheduled into the FUTURE (e.g.
+      // snoozed on another device and synced in) is no longer currently due, so
+      // drop it from this "due now" dialog instead of forcing the user to dismiss
+      // it again here. The worker re-fires it at the new time. Reminders whose
+      // timestamp is still in the past remain "due" until explicitly handled.
+      return remindAt <= Date.now();
     };
 
     // Confirm presence first so a later disappearance can be detected. A reminder
