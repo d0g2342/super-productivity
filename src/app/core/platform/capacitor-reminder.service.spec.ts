@@ -42,12 +42,14 @@ describe('CapacitorReminderService', () => {
       'getPermissionState',
       'cancel',
       'cancelMultiple',
+      'removeDelivered',
       'registerReminderActions',
     ]);
     notificationServiceSpy.ensurePermissions.and.returnValue(Promise.resolve(true));
     notificationServiceSpy.getPermissionState.and.returnValue(Promise.resolve('granted'));
     notificationServiceSpy.cancel.and.returnValue(Promise.resolve(true));
     notificationServiceSpy.cancelMultiple.and.returnValue(Promise.resolve(true));
+    notificationServiceSpy.removeDelivered.and.returnValue(Promise.resolve(true));
     notificationServiceSpy.registerReminderActions.and.returnValue(Promise.resolve());
 
     TestBed.configureTestingModule({
@@ -309,6 +311,9 @@ describe('CapacitorReminderService', () => {
     it('should call notificationService.cancel when cancelling reminder', async () => {
       await nativeService.cancelReminder(123);
       expect(notificationServiceSpy.cancel).toHaveBeenCalledWith(123);
+      // Also clears an already-delivered notification (cancel only affects pending),
+      // so a reminder handled on another device stops lingering on this one.
+      expect(notificationServiceSpy.removeDelivered).toHaveBeenCalledWith(123);
     });
 
     it('should call notificationService.cancelMultiple when cancelling multiple reminders', async () => {
